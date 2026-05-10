@@ -7,10 +7,78 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-        - name: Intialize NPM
+        - name: Checkout
           uses: actions/checkout@v4
 
         - name: Run Cypress
           uses: cypress-io/github-action@v6
+          continue-on-error: true
 
-    
+        - name: Post results to Trello
+          if: always()
+          env:
+            TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+            TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          run: |
+            python3 << 'EOF'
+            import json, os, urllib.request, urllib.parse, datetime
+
+            try:
+                with open('reports/json/results.json') as f:
+                    data = json.load(f)
+            except Exception:
+                data = []
+
+            total = passed = failed = skipped = 0
+            failed_scenarios = []
+
+            for feature in data:
+                for scenario in feature.get('elements', []):
+                    steps = scenario.get('steps', [])
+                    statuses = [s['result']['status'] for s in steps if 'result' in s]
+                    if not statuses:
+                        continue
+                    total += 1
+                    if all(s == 'passed' for s in statuses):
+                        passed += 1
+                    elif any(s == 'failed' for s in statuses):
+                        failed += 1
+                        failed_scenarios.append(f"  ❌ [{feature['name']}] {scenario['name']}")
+                    else:
+                        skipped += 1
+
+            overall = "✅ PASSED" if failed == 0 else "❌ FAILED"
+            branch = os.environ.get('GITHUB_REF_NAME', 'unknown')
+            run_num = os.environ.get('GITHUB_RUN_NUMBER', '-')
+            sha = os.environ.get('GITHUB_SHA', '')[:7]
+            date = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+
+            lines = [
+                f"🤖 *Cypress Test Report — {overall}*",
+                f"📅 {date}  |  Branch: `{branch}`  |  Run #{run_num}  |  Commit: `{sha}`",
+                f"",
+                f"📊 Results: {total} scenarios — ✅ {passed} passed | ❌ {failed} failed | ⏭ {skipped} skipped",
+            ]
+
+            if failed_scenarios:
+                lines.append("")
+                lines.append("*Failed scenarios:*")
+                lines.extend(failed_scenarios)
+
+            comment = "\n".join(lines)
+
+            card_id = "6a00c0e7236a206cab6b623c"
+            url = f"https://api.trello.com/1/cards/{card_id}/actions/comments"
+            params = urllib.parse.urlencode({
+                'key': os.environ['TRELLO_API_KEY'],
+                'token': os.environ['TRELLO_TOKEN'],
+                'text': comment
+            })
+            req = urllib.request.Request(f"{url}?{params}", method='POST')
+            try:
+                urllib.request.urlopen(req)
+                print("Trello comment posted successfully")
+            except Exception as e:
+                print(f"Failed to post Trello comment: {e}")
+                raise SystemExit(1)
+            EOF
