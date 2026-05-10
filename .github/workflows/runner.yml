@@ -1,6 +1,9 @@
 name: Run Cypress Test
 
-on: [push]
+on:
+  push:
+  schedule:
+    - cron: '0 8 * * *'
 
 jobs:
     cypress-runner:
