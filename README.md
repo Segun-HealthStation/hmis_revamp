@@ -139,3 +139,11 @@ For the automated reporting to work, the following secrets must be added to the 
 ## Team
 
 Maintained by the HealthStation QA team. For questions or issues, check the **HMIS Revamp** Trello board or reach out to the team.
+
+---
+
+## Contributor
+
+| Name | Role |
+|---|---|
+| Ayanloye Segun Samson | QA Manager |
